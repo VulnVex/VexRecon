@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+import socket, requests, sys, os, time, subprocess, shutil, random, threading
+from queue import Queue
+
+# Config
+MAX_THREADS = 100
+USE_TOR = False  # Set to True if using Tor with proxychains or SOCKS5
+
+# ANSI Colors
+RED, GREEN, YELLOW, RESET = "\033[91m", "\033[92m", "\033[93m", "\033[0m"
+
+def banner():
+    print(RED + r"""
+ 
+##############################################
+#__      __       _____                      #
+#\ \    / /      |  __ \                     #
+# \ \  / /____  _| |__) |___  ___ ___  _ __  #
+#  \ \/ / _ \ \/ /  _  // _ \/ __/ _ \| '_ \ #
+#   \  /  __/>  <| | \ \  __/ (_| (_) | | | |#
+#    \/ \___/_/\_\_|  \_\___|\___\___/|_| |_|#
+##############################################
+    Ethical Recon Framework — By NullVex
+""" + RESET)
+
+def menu():
+    print(f"""
+    {YELLOW}[1]{RESET} WHOIS Lookup
+    {YELLOW}[2]{RESET} DNS Enumeration
+    {YELLOW}[3]{RESET} Subdomain Brute-Forcer
+    {YELLOW}[4]{RESET} HTTP Header Grabber
+    {YELLOW}[5]{RESET} Full Port Scanner (Stealth)
+    {YELLOW}[6]{RESET} Web Crawler Preview
+    {YELLOW}[7]{RESET} Exit
+    """)
+
+def whois_lookup(target):
+    print(f"{GREEN}\n[+] Performing WHOIS lookup...\n{RESET}")
+    if shutil.which("whois"):
+        os.system(f"whois {target}")
+    else:
+        print("[-] 'whois' not installed and no fallback used (API skipped).")
+
+def dns_enum(target):
+    print(f"{GREEN}\n[+] Getting DNS records...\n{RESET}")
+    try:
+        result = socket.gethostbyname_ex(target)
+        print(f"Host: {result[0]}")
+        print("Aliases:", result[1])
+        print("IP Addresses:", result[2])
+    except Exception as e:
+        print(f"{RED}Error: {e}{RESET}")
+
+def subdomain_brute(target):
+    print(f"{GREEN}\n[+] Brute-forcing subdomains...\n{RESET}")
+    common_subs = ['www', 'mail', 'ftp', 'dev', 'test', 'admin', 'api', 'portal', 'staging', 'blog', 'shop']
+    for sub in common_subs:
+        try:
+            host = f"{sub}.{target}"
+            ip = socket.gethostbyname(host)
+            print(f"{GREEN}[FOUND]{RESET} {host} -> {ip}")
+        except:
+            pass
+
+def header_grabber(target):
+    print(f"{GREEN}\n[+] Fetching HTTP headers...\n{RESET}")
+    try:
+        proxies = {"http": "socks5h://127.0.0.1:9050", "https": "socks5h://127.0.0.1:9050"} if USE_TOR else None
+        r = requests.get(f"http://{target}", timeout=5, proxies=proxies, headers={'User-Agent': 'Mozilla/5.0'})
+        for k, v in r.headers.items():
+            print(f"{YELLOW}{k}{RESET}: {v}")
+    except:
+        print(f"{RED}[!] Failed to connect.{RESET}")
+
+# Port Scanner
+def stealth_port_scan(target):
+    print(f"{GREEN}\n[+] Scanning all ports on {target}...\n{RESET}")
+    open_ports = []
+    q = Queue()
+
+    def scan_port():
+        while not q.empty():
+            port = q.get()
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(0.2)
+                    result = s.connect_ex((target, port))
+                    if result == 0:
+                        try:
+                            s.send(b'HEAD / HTTP/1.0\r\n\r\n')
+                            banner = s.recv(100).decode(errors='ignore').strip()
+                        except:
+                            banner = ''
+                        print(f"{GREEN}[OPEN]{RESET} Port {port} {'-- ' + banner if banner else ''}")
+            except:
+                pass
+            finally:
+                q.task_done()
+
+    ports = list(range(1, 65536))
+    random.shuffle(ports)
+    for port in ports:
+        q.put(port)
+
+    threads = []
+    for _ in range(min(MAX_THREADS, len(ports))):
+        t = threading.Thread(target=scan_port)
+        t.daemon = True
+        t.start()
+        threads.append(t)
+
+    q.join()
+
+def crawl_preview(target):
+    print(f"{GREEN}\n[+] Previewing website content...\n{RESET}")
+    try:
+        proxies = {"http": "socks5h://127.0.0.1:9050", "https": "socks5h://127.0.0.1:9050"} if USE_TOR else None
+        r = requests.get(f"http://{target}", timeout=5, proxies=proxies)
+        print(r.text[:1000])
+    except:
+        print(f"{RED}[!] Could not fetch page.{RESET}")
+
+def main():
+    banner()
+    target = input(f"{YELLOW}Enter target domain or IP: {RESET}").strip()
+    while True:
+        menu()
+        choice = input(f"{YELLOW}VexRecon> {RESET}").strip()
+        if choice == "1":
+            whois_lookup(target)
+        elif choice == "2":
+            dns_enum(target)
+        elif choice == "3":
+            subdomain_brute(target)
+        elif choice == "4":
+            header_grabber(target)
+        elif choice == "5":
+            stealth_port_scan(target)
+        elif choice == "6":
+            crawl_preview(target)
+        elif choice == "7":
+            print("[*] Exiting VexRecon.")
+            break
+        else:
+            print(f"{RED}[!] Invalid choice.{RESET}")
+
+if __name__ == "__main__":
+    main()
