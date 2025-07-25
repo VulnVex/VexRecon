@@ -24,7 +24,7 @@
 ## 🚀 Installation
 
 ```bash
-git clone https://github.com/rayan123321-sudo/VexRecon.git
+git clone https://github.com/VulnVex/VexRecon.git
 cd VexRecon
 pip install -r requirements.txt
 
